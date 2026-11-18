@@ -456,10 +456,10 @@ const state={
   viewYaw:0,viewPitch:0,dragging:false,lastInput:0,motionReduced:window.matchMedia("(prefers-reduced-motion: reduce)").matches
 };
 const scareBeats=[
-  {at:.174,message:"IT FOUND YOU",kind:0},
-  {at:.472,message:"WAKE UP",kind:1},
-  {at:.755,message:"DON'T LOOK",kind:0},
-  {at:.916,message:"YOU BELONG HERE",kind:1}
+  {at:.102,message:"IT FOUND YOU",kind:0},
+  {at:.501,message:"WAKE UP",kind:1},
+  {at:.811,message:"DON'T LOOK",kind:0},
+  {at:.927,message:"YOU BELONG HERE",kind:1}
 ];
 const whispers=[
   {at:.048,text:"KEEP YOUR HANDS INSIDE THE CAR"},
@@ -469,7 +469,7 @@ const whispers=[
   {at:.684,text:"THIS HOUSE KNOWS YOUR NAME"},
   {at:.875,text:"THERE WAS NEVER AN EXIT"}
 ];
-const playedScares=new Set(), playedWhispers=new Set();
+const playedScares=new Set(), playedWhispers=new Set(), playedTeases=new Set();
 // Signed curvature in 1/metre and track grade for the force integrator.
 function sampleTrackForces(t) {
   const eps=Math.min(.0015,3/trackLength);
@@ -510,6 +510,30 @@ class Soundscape {
     this.master=ctx.createGain();
     this.master.gain.value=0;
     this.master.connect(compressor);
+    // Scare effects get their own restrained cinematic reverb tail; the wheels
+    // remain dry so the sound of crossing rail joints stays mechanically crisp.
+    this.fxBus=ctx.createGain();
+    this.fxBus.gain.value=.82;
+    this.fxBus.connect(this.master);
+    const impulseSeconds=1.65;
+    const impulse=ctx.createBuffer(2,Math.floor(ctx.sampleRate*impulseSeconds),ctx.sampleRate);
+    for(let channel=0;channel<2;channel++){
+      const data=impulse.getChannelData(channel);
+      let previous=0;
+      for(let i=0;i<data.length;i++){
+        const x=i/data.length;
+        // Dark, irregular room reflections: fast onset, dense fading tail.
+        const envelope=Math.pow(1-x,3.4)*(1-Math.exp(-x*700));
+        const noise=(Math.random()*2-1);
+        previous=previous*.35+noise*.65;
+        data[i]=previous*envelope*.72;
+      }
+    }
+    this.reverb=ctx.createConvolver();
+    this.reverb.buffer=impulse;
+    const wet=ctx.createGain();wet.gain.value=.20;
+    this.fxBus.connect(this.reverb);
+    this.reverb.connect(wet);wet.connect(this.master);
     const noise=ctx.createBuffer(1,ctx.sampleRate*3,ctx.sampleRate);
     const arr=noise.getChannelData(0);
     // Band-limited by the filters below; no oscillator-based fake "engine".
@@ -644,36 +668,66 @@ class Soundscape {
       osc.connect(sub);sub.connect(this.master);osc.start(now);osc.stop(now+.15);
     }
   }
-  breath(duration=.65,intensity=.14) {
-    if(!this.context||!state.soundOn)return;
-    const ctx=this.context,now=ctx.currentTime;
-    const src=ctx.createBufferSource();src.buffer=this.noiseBuffer;
-    const filter=ctx.createBiquadFilter();
-    filter.type="bandpass";filter.frequency.value=1250;filter.Q.value=.7;
+  // Layered acoustic events. Every burst is filtered noise with curved
+  // envelopes, not a scream made from clipped sawtooth or square waves.
+  noiseBurst({when=0,duration=.6,attack=.015,volume=.18,start=680,end=320,
+              mode="bandpass",quality=.7,send}={}){
+    const ctx=this.context;
+    if(!ctx||!state.soundOn||this.paused)return;
+    const now=ctx.currentTime+when;
+    const source=ctx.createBufferSource();source.buffer=this.noiseBuffer;
+    const filter=ctx.createBiquadFilter();filter.type=mode;filter.Q.value=quality;
+    filter.frequency.setValueAtTime(start,now);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(40,end),now+duration);
     const env=ctx.createGain();
     env.gain.setValueAtTime(.0001,now);
-    env.gain.linearRampToValueAtTime(intensity,now+duration*.44);
+    env.gain.linearRampToValueAtTime(volume,now+Math.max(.008,attack));
     env.gain.exponentialRampToValueAtTime(.0001,now+duration);
-    src.connect(filter);filter.connect(env);env.connect(this.master);
-    src.start(now,Math.random()*2);src.stop(now+duration+.01);
+    source.connect(filter);filter.connect(env);env.connect(send||this.fxBus);
+    source.start(now,Math.random()*1.5);source.stop(now+duration+.025);
   }
-  sting(){
-    if(!this.context||!state.soundOn)return;
-    this.impact(1.4,"joint",0);
-    this.breath(.5,.49);
-    const ctx=this.context,now=ctx.currentTime;
-    const osc=ctx.createOscillator();
+  bassDrop({when=0,length=.9,pitch=58,volume=.32}={}){
+    const ctx=this.context;
+    if(!ctx||!state.soundOn||this.paused)return;
+    const now=ctx.currentTime+when,osc=ctx.createOscillator(),env=ctx.createGain();
     osc.type="sine";
-    osc.frequency.setValueAtTime(180,now);
-    osc.frequency.exponentialRampToValueAtTime(38,now+.72);
-    const gain=ctx.createGain();
-    gain.gain.setValueAtTime(.001,now);
-    gain.gain.linearRampToValueAtTime(.30,now+.02);
-    gain.gain.exponentialRampToValueAtTime(.001,now+.77);
-    osc.connect(gain);gain.connect(this.master);
-    osc.start(now);osc.stop(now+.8);
+    osc.frequency.setValueAtTime(pitch,now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(25,pitch*.54),now+length);
+    env.gain.setValueAtTime(.0001,now);
+    env.gain.linearRampToValueAtTime(volume,now+.018);
+    env.gain.exponentialRampToValueAtTime(.0001,now+length);
+    osc.connect(env);env.connect(this.fxBus);
+    osc.start(now);osc.stop(now+length+.02);
   }
-  whisper(){this.breath(.8,.055);}
+  breath(duration=.65,intensity=.14) {
+    if(!this.context||!state.soundOn)return;
+    this.noiseBurst({duration,attack:duration*.42,volume:intensity,
+      start:1600,end:500,mode:"bandpass",quality:.38});
+  }
+  anticipate(kind=0) {
+    if(!this.context||!state.soundOn||this.paused)return;
+    // Soft air displacement that can be missed over fast rolling, but becomes
+    // conspicuous in the intentionally quiet dark rooms.
+    this.noiseBurst({duration:1.15,attack:.83,volume:kind?.047:.034,
+      start:340,end:1700,mode:"bandpass",quality:.46});
+  }
+  sting(kind=0) {
+    if(!this.context||!state.soundOn||this.paused)return;
+    // A film-style orchestral hit is approximated from layered low-frequency
+    // pressure, reverberant steel resonance and an inhuman air rush.
+    // No piercing 2 kHz saw-tooth scream.
+    this.bassDrop({length:1.12,pitch:kind?69:55,volume:kind?.26:.34});
+    this.noiseBurst({duration:.53,attack:.009,volume:.35,
+      start:210,end:74,mode:"lowpass",quality:.6});
+    this.noiseBurst({duration:.72,attack:.025,volume:kind?.13:.10,
+      start:kind?1700:890,end:240,mode:"bandpass",quality:.95});
+    this.noiseBurst({when:.075,duration:1.0,attack:.15,volume:.072,
+      start:1050,end:260,mode:"bandpass",quality:.38});
+    if(kind)this.noiseBurst({duration:.31,attack:.007,volume:.055,
+      start:3200,end:700,mode:"bandpass",quality:1.2});
+  }
+  whisper(){this.breath(.85,.035);}
+
 }
 const audio=new Soundscape();
 function showChapter(index){
@@ -701,7 +755,7 @@ function jumpScare(beat){
   $("scareMessage").classList.add("visible");
   $("scareMessage").setAttribute("aria-hidden","false");
   $("scareFlash").classList.add("active");
-  audio.sting();
+  audio.sting(beat.kind);
 }
 function updateScare(dt){
   if(state.scareTime>0){
@@ -744,7 +798,7 @@ function reset(){
   state.done=false;state.paused=false;state.playing=true;state.scares=0;
   state.scareTime=0;state.scareFlicker=0;state.viewYaw=0;state.viewPitch=0;
   state.chapter=-1;state.chapterHold=0;state.whisperHold=0;
-  playedScares.clear();playedWhispers.clear();
+  playedScares.clear();playedWhispers.clear();playedTeases.clear();
   scareFace.visible=false;
   $("scareMessage").classList.remove("visible");
   $("scareFlash").classList.remove("active");
@@ -890,8 +944,13 @@ function animate(ms){
     const newChapter=chapterAt(state.progress);
     if(newChapter!==state.chapter){state.chapter=newChapter;showChapter(newChapter);}
     for(let i=0;i<scareBeats.length;i++){
-      if(state.progress>=scareBeats[i].at&&!playedScares.has(i)){
-        playedScares.add(i);jumpScare(scareBeats[i]);
+      const beat=scareBeats[i];
+      if(state.progress>=beat.at-.019&&!playedTeases.has(i)){
+        playedTeases.add(i);
+        if(state.scareLevel!=="low"||beat.kind===0)audio.anticipate(beat.kind);
+      }
+      if(state.progress>=beat.at&&!playedScares.has(i)){
+        playedScares.add(i);jumpScare(beat);
       }
     }
     for(let i=0;i<whispers.length;i++){
