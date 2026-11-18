@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Validate gravity, lift, brake and integration physics
+        run: node --test tests/physics.test.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
