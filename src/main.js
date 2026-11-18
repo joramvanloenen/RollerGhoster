@@ -327,45 +327,111 @@ function ghost(t, side, scale=1.2) {
 function coffin(t,side) {
   const g=frameGroup(t);
   if(!sceneryClear(g,side*4,-.7,0,3,2,4.3))return;
-  const x=side*4.0;
-  const base=cube(g,materials.wood,2.15,.72,3.4,x,-1.08,0);
-  base.rotation.y=range(-.5,.5);
-  const lid=cube(g,materials.woodTrim,2.36,.18,3.55,x,-.59,0);
-  lid.rotation.z=side*.1;lid.rotation.y=base.rotation.y;
-  cube(g,materials.rustyIron,.11,.12,3.0,x,-.47,0);
-  sphere(g,materials.bone,.18,x,-.11,-.65);
+  // A tapered eight-sided coffin profile; never a rectangle with a lid.
+  const group=new THREE.Group();
+  group.position.set(side*4.0,-1.45,0);
+  group.rotation.y=range(-.53,.53);
+  g.add(group);
+  const outline=[
+    [-.45,-1.7],[.45,-1.7],[.85,-1.13],[1.04,.63],
+    [.63,1.68],[-.63,1.68],[-1.04,.63],[-.85,-1.13]
+  ];
+  const shape=new THREE.Shape();
+  outline.forEach(([x,z],i)=>i?shape.lineTo(x,z):shape.moveTo(x,z));
+  shape.closePath();
+  const bodyGeo=new THREE.ExtrudeGeometry(shape,{
+    depth:.70,bevelEnabled:true,bevelThickness:.055,bevelSize:.065,
+    bevelSegments:2,steps:1,curveSegments:1
+  });
+  bodyGeo.rotateX(-Math.PI/2);
+  group.add(new THREE.Mesh(bodyGeo,materials.wood));
+  const lidGeo=new THREE.ExtrudeGeometry(shape,{
+    depth:.13,bevelEnabled:true,bevelThickness:.03,bevelSize:.055,
+    bevelSegments:1,steps:1,curveSegments:1
+  });
+  lidGeo.rotateX(-Math.PI/2);
+  const lid=new THREE.Mesh(lidGeo,materials.woodTrim);
+  lid.position.y=.74;
+  lid.rotation.z=side*.025;
+  group.add(lid);
+  // Brass edge, lid hardware, raised cross and side handles.
+  const cross=cube(group,materials.rustyIron,.12,.047,2.36,0,.96,0);
+  cross.rotation.y=.02;
+  cube(group,materials.rustyIron,.78,.048,.12,0,.96,.32);
+  for(const z of [-.9,.85]){
+    for(const sideX of [-1,1]){
+      const knob=sphere(group,materials.rail,.085,sideX*.88,.43,z,8,6);
+      knob.scale.set(1.25,.5,1);
+    }
+  }
 }
 function sculpture(t,side) {
   const g=frameGroup(t);
   if(!sceneryClear(g,side*4.2,1.5,0,2.8,6.2,2.9))return;
   const x=side*4.2;
-  cube(g,materials.stoneTrim,2.1,.6,2.1,x,-1.39,0);
-  cube(g,materials.stone,1.2,3.1,1.2,x,.55,0);
-  const shroud=new THREE.Mesh(new THREE.ConeGeometry(1.0,3.2,7),materials.stone);
-  shroud.position.set(x,3.0,0);g.add(shroud);
-  sphere(g,materials.bone,.53,x,4.18,-.14);
-  const eyeMat=materials.red;
-  sphere(g,eyeMat,.078,x-.17,4.24,-.62,6,5);
-  sphere(g,eyeMat,.078,x+.17,4.24,-.62,6,5);
+  const statue=new THREE.Group();
+  statue.position.set(x,-1.13,0);
+  statue.rotation.y=range(-.3,.3);
+  g.add(statue);
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(1.19,1.34,.43,9),materials.stoneTrim);
+  base.position.y=.21;statue.add(base);
+  const waist=[
+    [1.02,.35],[1.16,.56],[1.03,.97],[.94,1.34],
+    [.84,1.83],[.75,2.4],[.62,2.78],[.77,3.03],
+    [.57,3.32],[.47,3.57],[.50,3.84],[.34,4.03],[.02,4.05]
+  ].map(([r,y])=>new THREE.Vector2(r,y));
+  const cloak=new THREE.Mesh(new THREE.LatheGeometry(waist,17,0,Math.PI*2),materials.stone);
+  cloak.material.side=THREE.DoubleSide;
+  statue.add(cloak);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.39,12,9),materials.bone);
+  head.scale.set(.84,1.12,.83);
+  head.position.set(0,3.77,-.25);
+  statue.add(head);
+  // The hollow hood creates a face that absorbs light rather than a cartoon.
+  const hood=new THREE.Mesh(new THREE.SphereGeometry(.49,15,9,0,Math.PI*2,0,Math.PI*.7),materials.stone);
+  hood.position.set(0,3.97,-.05);hood.scale.set(1,1.07,1.16);statue.add(hood);
+  const face=new THREE.Mesh(new THREE.SphereGeometry(.27,12,8),materials.black);
+  face.scale.set(1,1.18,.26);face.position.set(0,3.72,-.59);statue.add(face);
+  const eyes=materials.red;
+  for(const s of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.034,8,5),eyes);
+    eye.position.set(s*.13,3.77,-.68);statue.add(eye);
+    // Hands emerge from heavy sleeves, not a stiff geometric cone.
+    const sleeve=new THREE.Mesh(new THREE.CylinderGeometry(.25,.42,.9,8),materials.stone);
+    sleeve.position.set(s*.83,2.14,-.3);sleeve.rotation.z=s*.36;statue.add(sleeve);
+    const hand=new THREE.Mesh(new THREE.SphereGeometry(.20,8,6),materials.bone);
+    hand.position.set(s*1.01,1.63,-.39);hand.scale.set(.6,1,.68);statue.add(hand);
+  }
 }
 function nursery(t,side) {
   const g=frameGroup(t);
   if(!sceneryClear(g,side*3.6,0,0,3.3,2.7,2.3))return;
   const x=side*3.6;
-  cube(g,materials.woodTrim,2.7,.23,1.4,x,-.6,0);
-  for(const sx of [-1,1]){
-    cube(g,materials.wood,.18,2.15,.18,x+sx*1.27,.25,-.57);
-    cube(g,materials.wood,.18,2.15,.18,x+sx*1.27,.25,.57);
+  // Antique wrought-iron cot: continuous curved rails, spindles and a crib.
+  cube(g,materials.wood,2.55,.23,1.48,x,-.72,0);
+  for(const dx of [-1,1]){
+    for(const dz of [-1,1]){
+      const leg=cylinder(g,materials.railDark,.08,.11,2.3,x+dx*1.21,-.04,dz*.67,8);
+      leg.rotation.z=dx*.02;
+      sphere(g,materials.rail,.125,x+dx*1.21,1.17,dz*.67,9,7);
+    }
   }
-  for(let j=0;j<11;j++){
-    cube(g,materials.wood,.09,1.45,.1,x-1.15+j*.23,.1,-.6);
-    cube(g,materials.wood,.09,1.45,.1,x-1.15+j*.23,.1,.6);
+  for(const dz of [-1,1]){
+    for(let i=0;i<10;i++){
+      cylinder(g,materials.railDark,.034,.035,1.46,x-1.03+i*.225,.12,dz*.7,7);
+    }
+    cube(g,materials.railDark,2.57,.11,.09,x,.84,dz*.7);
   }
-  const doll=sphere(g,materials.bone,.25,x,-.14,0);
-  doll.position.y=0;
-  sphere(g,materials.black,.045,x-.08,.05,-.22,6,5);
-  sphere(g,materials.black,.045,x+.08,.05,-.22,6,5);
+  const pillow=sphere(g,materials.bone,.40,x,-.50,.39,10,7);
+  pillow.scale.set(1.6,.31,.7);
+  const doll=sphere(g,materials.bone,.22,x,-.18,-.23,12,8);
+  doll.scale.set(.84,1.07,.79);
+  const body=sphere(g,materials.velvet,.31,x,-.42,.03,9,7);
+  body.scale.set(.70,.7,1.22);
+  sphere(g,materials.black,.041,x-.075,-.12,-.415,6,5);
+  sphere(g,materials.black,.041,x+.075,-.12,-.415,6,5);
 }
+
 function doorsAt(t) {
   const g=frameGroup(t);
   cube(g,materials.stoneTrim,7.4,.58,1.7,0,5.3,0);
