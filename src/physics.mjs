@@ -70,7 +70,7 @@ export function computeRideForces(progress, speed, grade, verticalCurvature = 0,
     verticalG,
     lateralG,
     totalG: Math.hypot(verticalG, lateralG),
-    mode: braking > .05 ? "brake" : unit?.type || "coast",
+    mode: braking > .05 && unit?.type === "brake" ? "brake" : unit?.type || "coast",
     wheelHz: speed / SLEEPER_SPACING,
     jointHz: speed / JOINT_SPACING
   };
