@@ -568,58 +568,197 @@ function formatTime(s) {
   const time=Math.max(0,Math.floor(s));
   return String(Math.floor(time/60)).padStart(2,"0")+":"+String(time%60).padStart(2,"0");
 }
+/**
+ * Coaster sound is synthesized from mechanics, not an ambient drone.
+ * Four broadband layers represent wheel bearings/rail resonance, the
+ * carriage, wind and wheel flange friction. Actual sleeper/rail-joint
+ * crossings schedule individual transient impacts in DISTANCE space.
+ */
 class Soundscape {
-  constructor() {this.context=null;this.master=null;this.rolling=null;this.drone=null;}
-  init(){
+  constructor() {
+    this.context=null;this.master=null;this.layers={};
+    this.lastDistance=0;this.paused=false;
+  }
+  init() {
     if(this.context){this.context.resume();return;}
     const Audio=window.AudioContext||window.webkitAudioContext;
     if(!Audio)return;
     const ctx=new Audio();
     this.context=ctx;
-    this.master=ctx.createGain();this.master.gain.value=.6;this.master.connect(ctx.destination);
-    const low=ctx.createBiquadFilter();low.type="lowpass";low.frequency.value=240;low.connect(this.master);
-    for(const [freq,type,gain] of [[42,"sine",.055],[55,"sawtooth",.018],[84,"sine",.016]]){
-      const osc=ctx.createOscillator();osc.type=type;osc.frequency.value=freq;
-      const amp=ctx.createGain();amp.gain.value=gain;
-      osc.connect(amp);amp.connect(low);osc.start();
-      if(freq===42)this.drone=osc;
-    }
-    const buffer=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
-    const data=buffer.getChannelData(0);
-    for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
-    const noise=ctx.createBufferSource();noise.buffer=buffer;noise.loop=true;
-    const rumbleFilter=ctx.createBiquadFilter();rumbleFilter.type="lowpass";rumbleFilter.frequency.value=160;
-    this.rolling=ctx.createGain();this.rolling.gain.value=.01;
-    noise.connect(rumbleFilter);rumbleFilter.connect(this.rolling);this.rolling.connect(this.master);noise.start();
+    const compressor=ctx.createDynamicsCompressor();
+    compressor.threshold.value=-19;
+    compressor.knee.value=13;
+    compressor.ratio.value=3;
+    compressor.attack.value=.004;
+    compressor.release.value=.21;
+    compressor.connect(ctx.destination);
+    this.master=ctx.createGain();
+    this.master.gain.value=0;
+    this.master.connect(compressor);
+    const noise=ctx.createBuffer(1,ctx.sampleRate*3,ctx.sampleRate);
+    const arr=noise.getChannelData(0);
+    // Band-limited by the filters below; no oscillator-based fake "engine".
+    for(let i=0;i<arr.length;i++)arr[i]=Math.random()*2-1;
+    this.noiseBuffer=noise;
+    const make=(name,type,freq,q,secondary)=>{
+      const source=ctx.createBufferSource();
+      source.buffer=noise;source.loop=true;
+      const filter=ctx.createBiquadFilter();
+      filter.type=type;filter.frequency.value=freq;
+      filter.Q.value=q;
+      const gain=ctx.createGain();gain.gain.value=0;
+      source.connect(filter);
+      if(secondary){
+        const filter2=ctx.createBiquadFilter();
+        filter2.type=secondary.type;filter2.frequency.value=secondary.freq;
+        filter.connect(filter2);filter2.connect(gain);
+      }else filter.connect(gain);
+      gain.connect(this.master);
+      source.start(0,Math.random()*2);
+      this.layers[name]={source,filter,gain};
+    };
+    make("steel","lowpass",180,.45);
+    make("carriage","bandpass",380,.45);
+    make("rattle","bandpass",1200,.6);
+    make("air","highpass",340,.4,{type:"lowpass",freq:4800});
+    make("flange","bandpass",1600,8);
+    make("brake","bandpass",2550,.65);
+    make("chain","bandpass",1400,1.5);
+    const bearing=ctx.createOscillator();
+    bearing.type="triangle";
+    bearing.frequency.value=75;
+    const bearingFilter=ctx.createBiquadFilter();
+    bearingFilter.type="lowpass";bearingFilter.frequency.value=450;
+    const bearingGain=ctx.createGain();bearingGain.gain.value=0;
+    bearing.connect(bearingFilter);bearingFilter.connect(bearingGain);
+    bearingGain.connect(this.master);bearing.start();
+    this.bearing={source:bearing,filter:bearingFilter,gain:bearingGain};
     this.setEnabled(state.soundOn);
   }
   setEnabled(on){
     if(!this.context||!this.master)return;
-    this.master.gain.setTargetAtTime(on?.62:0,this.context.currentTime,.065);
+    const volume=on&&!this.paused?.64:0;
+    this.master.gain.setTargetAtTime(volume,this.context.currentTime,.055);
   }
-  tick(speed,progress){
-    if(!this.context)return;
-    this.rolling.gain.setTargetAtTime(.017+speed*.004,this.context.currentTime,.15);
-    if(this.drone)this.drone.frequency.setTargetAtTime(43+Math.sin(progress*35)*3,this.context.currentTime,.2);
+  setPaused(paused){
+    this.paused=paused;
+    this.setEnabled(state.soundOn);
+    // Impacts must not build up when resumed.
+    this.lastDistance=state.distance;
   }
-  tone(freq,seconds=.5,volume=.1,type="sine"){
+  param(node,value,smoothing=.065){
+    node.setTargetAtTime(Math.max(.00001,value),this.context.currentTime,smoothing);
+  }
+  tick(speed,distance,forces){
+    if(!this.context||!this.master)return;
+    const s=clamp(speed/25,0,1),g=clamp(forces.totalG,0,3.5);
+    const turns=clamp((forces.lateralG-.16)/1.3,0,1);
+    const compression=clamp((g-.6)/1.9,0,1);
+    const brake=clamp(forces.braking/5,0,1);
+    const lift=forces.mode==="lift"?1:0;
+    // Different frequency bands rise at different rates with velocity:
+    // wheel/rail resonance is almost linear; wind pressure is v².
+    this.param(this.layers.steel.gain.gain,.006+.105*s+.045*compression*s);
+    this.param(this.layers.carriage.gain.gain,.003+.075*s);
+    this.param(this.layers.rattle.gain.gain,.001+.048*s*s+.032*compression*s);
+    this.param(this.layers.air.gain.gain,.0007+.155*s*s);
+    this.param(this.layers.flange.gain.gain,.0002+.082*turns*s);
+    this.param(this.layers.brake.gain.gain,.0002+.15*brake);
+    this.param(this.layers.chain.gain.gain,.0003+.016*lift);
+    this.param(this.layers.steel.filter.frequency,100+speed*13);
+    this.param(this.layers.carriage.filter.frequency,210+speed*17);
+    this.param(this.layers.rattle.filter.frequency,650+speed*32);
+    this.param(this.layers.air.filter.frequency,250+speed*13);
+    this.param(this.layers.flange.filter.frequency,1080+speed*33);
+    this.param(this.layers.brake.filter.frequency,1800+speed*25);
+    this.param(this.bearing.source.frequency,64+speed*6.7);
+    this.param(this.bearing.gain.gain,.0002+s*.012);
+    this.param(this.bearing.filter.frequency,180+speed*25);
+    // Rail sleepers and expansion joints: actual position crossings.
+    // This naturally increases impact frequency as the car speeds up.
+    if(distance<this.lastDistance)this.lastDistance=distance;
+    const prevSleeper=Math.floor(this.lastDistance/2.25);
+    const nextSleeper=Math.floor(distance/2.25);
+    const prevJoint=Math.floor(this.lastDistance/13.5);
+    const nextJoint=Math.floor(distance/13.5);
+    if(state.soundOn&&!this.paused){
+      const load=clamp(.65+compression*.5,0.6,1.2);
+      const impact=clamp(.21+.79*s,.12,1)*load;
+      for(let k=prevSleeper+1;k<=Math.min(nextSleeper,prevSleeper+3);k++)
+        this.impact(impact*.51,"sleeper",0);
+      for(let k=prevJoint+1;k<=Math.min(nextJoint,prevJoint+2);k++){
+        this.impact(impact*.94,"joint",0);
+        this.impact(impact*.6,"joint",.084);
+      }
+      if(lift){
+        const before=Math.floor(this.lastDistance/.58),after=Math.floor(distance/.58);
+        for(let k=before+1;k<=Math.min(after,before+4);k++)
+          this.impact(.15,"ratchet",0);
+      }
+    }
+    this.lastDistance=distance;
+  }
+  impact(intensity,kind,delay=0){
+    const ctx=this.context;
+    if(!ctx||!state.soundOn||this.paused)return;
+    const now=ctx.currentTime+delay;
+    const isJoint=kind==="joint", isRatchet=kind==="ratchet";
+    const duration=isJoint?.13:isRatchet?.038:.07;
+    const source=ctx.createBufferSource();
+    source.buffer=this.noiseBuffer;
+    const bp=ctx.createBiquadFilter();
+    bp.type="bandpass";
+    bp.frequency.value=isRatchet?2200:isJoint?330:750;
+    bp.Q.value=isRatchet?.7:.45;
+    const env=ctx.createGain();
+    env.gain.setValueAtTime(.00001,now);
+    env.gain.linearRampToValueAtTime(intensity*(isJoint?.28:isRatchet?.12:.16),now+.003);
+    env.gain.exponentialRampToValueAtTime(.00001,now+duration);
+    source.connect(bp);bp.connect(env);env.connect(this.master);
+    source.start(now,Math.random()*1.5);
+    source.stop(now+duration+.02);
+    if(isJoint){
+      const osc=ctx.createOscillator();
+      osc.type="sine";
+      osc.frequency.setValueAtTime(135,now);
+      osc.frequency.exponentialRampToValueAtTime(62,now+.12);
+      const sub=ctx.createGain();
+      sub.gain.setValueAtTime(.00001,now);
+      sub.gain.exponentialRampToValueAtTime(.12*intensity,now+.008);
+      sub.gain.exponentialRampToValueAtTime(.00001,now+.14);
+      osc.connect(sub);sub.connect(this.master);osc.start(now);osc.stop(now+.15);
+    }
+  }
+  breath(duration=.65,intensity=.14) {
     if(!this.context||!state.soundOn)return;
-    const ctx=this.context, now=ctx.currentTime;
-    const osc=ctx.createOscillator(), gain=ctx.createGain();
-    osc.type=type;osc.frequency.setValueAtTime(freq,now);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(40,freq*.4),now+seconds);
-    gain.gain.setValueAtTime(.0001,now);
-    gain.gain.exponentialRampToValueAtTime(Math.max(.002,volume),now+.023);
-    gain.gain.exponentialRampToValueAtTime(.0001,now+seconds);
-    osc.connect(gain);gain.connect(this.master);osc.start(now);osc.stop(now+seconds+.02);
+    const ctx=this.context,now=ctx.currentTime;
+    const src=ctx.createBufferSource();src.buffer=this.noiseBuffer;
+    const filter=ctx.createBiquadFilter();
+    filter.type="bandpass";filter.frequency.value=1250;filter.Q.value=.7;
+    const env=ctx.createGain();
+    env.gain.setValueAtTime(.0001,now);
+    env.gain.linearRampToValueAtTime(intensity,now+duration*.44);
+    env.gain.exponentialRampToValueAtTime(.0001,now+duration);
+    src.connect(filter);filter.connect(env);env.connect(this.master);
+    src.start(now,Math.random()*2);src.stop(now+duration+.01);
   }
   sting(){
-    this.tone(880,.8,.3,"sawtooth");
-    this.tone(137,.95,.34,"square");
-    this.tone(1970,.27,.18,"sawtooth");
-    this.tone(66,1,.25,"sine");
+    if(!this.context||!state.soundOn)return;
+    this.impact(1.4,"joint",0);
+    this.breath(.5,.49);
+    const ctx=this.context,now=ctx.currentTime;
+    const osc=ctx.createOscillator();
+    osc.type="sine";
+    osc.frequency.setValueAtTime(180,now);
+    osc.frequency.exponentialRampToValueAtTime(38,now+.72);
+    const gain=ctx.createGain();
+    gain.gain.setValueAtTime(.001,now);
+    gain.gain.linearRampToValueAtTime(.30,now+.02);
+    gain.gain.exponentialRampToValueAtTime(.001,now+.77);
+    osc.connect(gain);gain.connect(this.master);
+    osc.start(now);osc.stop(now+.8);
   }
-  whisper(){this.tone(295,.6,.04,"sine");}
+  whisper(){this.breath(.8,.055);}
 }
 const audio=new Soundscape();
 function showChapter(index){
