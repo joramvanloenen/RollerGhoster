@@ -978,6 +978,8 @@ function animate(ms){
   if(ms-lastHud>120){updateHud();lastHud=ms;}
   renderer.render(scene,camera);
 }
+// Read-only development hook used by the GitHub browser smoke test.
+window.__RollerGhosterDebug={renderer,scene,camera,state,trackLength};
 updateCamera(.016,0);
 updateHud();
 requestAnimationFrame(animate);
