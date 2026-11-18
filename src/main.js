@@ -820,7 +820,8 @@ function finish(){
   $("endScares").textContent=String(state.scares).padStart(2,"0");
   $("endScreen").classList.remove("is-hidden");
   $("liveIndicator").querySelector("span").textContent="RIDE COMPLETE";
-  audio.tone(190,1.9,.1,"sine");
+  audio.breath(1.2,.07);
+  if(audio.context)audio.master.gain.setTargetAtTime(0,audio.context.currentTime+1.1,.22);
 }
 function reset(){
   state.progress=0;state.distance=0;state.speed=0;state.time=0;
