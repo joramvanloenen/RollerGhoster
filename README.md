@@ -8,14 +8,14 @@ A dark, cinematic first-person rollercoaster ride through Blackthorn Estate. Bui
 
 ## The ride
 
-- A complete spline-based coaster circuit with twin rails, sleepers, supports, cart and dynamic speed pacing. Speed rises on drops and settles into unnervingly slow stretches.
+- A complete spline-based coaster circuit with twin rails, sleepers, supports and carriage. Forward speed is integrated from **gravity projected onto track slope, rolling resistance, aerodynamic drag, lift chain traction, station drive tyres and magnetic brakes**. It is never overwritten by a hard-coded speed profile.
 - Six haunted environments: boarding house, watching gallery, forgotten nursery, Blackthorn drop, family crypt and the last exit.
 - Gothic corridors, masonry, timber panelling, lanterns, portraits, coffins, abandoned cots, statues, grave markers, dead trees, moving double doors, floating spectres, dust and fog.
 - **Two camera-mounted spotlights** that aim where you look and briefly malfunction during frightening moments.
 - Jump scares triggered during slow, quiet parts of the circuit, with a distorted close-up apparition, screen flash, camera disturbance and synthesized audio stinger. Choose **FULL** or **MILD** intensity before boarding.
-- Procedural Web Audio: drone, rumbling wheels, whispers and frightening accents. The soundtrack starts only after a button press, respecting browser autoplay rules.
-- Responsive first-person UI with elapsed time, velocity, ride progress, chapter and location information; mobile drag-to-look support.
-- No build step, account, backend, cookies or data storage.
+- Force-driven procedural Web Audio: rail resonance, wheel bearing vibration, air buffeting (speed²), wheel flange squeal under lateral G load, rail-sleeper clacks spaced every 2.25 m, doubled rail-joint knocks every 13.5 m, lift ratchet ticks and magnetic-brake hiss. Quiet stretches really become quieter. Jump scares use a separate short shock impact/breath. Audio starts only after a button press.
+- Responsive first-person UI with elapsed time, velocity, calculated G-load, ride progress, chapter and location information; mobile drag-to-look support.
+- Scenery clearance checks against the complete swept car path keep walls, scenery and vertical supports out of the vehicle's envelope—even where the track doubles back near an earlier corridor. Doors swing fully open well before the train arrives. No build step, account, backend, cookies or data storage.
 
 ## Controls
 
@@ -50,3 +50,6 @@ The deployment URL is expected to be https://joramvanloenen.github.io/RollerGhos
 The visual and audio experience is self-contained in [src/main.js](src/main.js); the UI and accessibility styles are in [styles.css](styles.css). All textures (portraits, spectres, masonry, signs) are painted onto in-memory canvases, and all sound is synthesized in the browser.
 
 Built with [Three.js](https://threejs.org/) and standard Web Audio.
+## Physics validation
+
+Run `node --test tests/physics.test.mjs` locally. The Pages deployment also runs these deterministic tests before publishing. The model is a simplified ride simulation with powered lift/drive sections; it is not an engineering-grade structural or safety simulator.
