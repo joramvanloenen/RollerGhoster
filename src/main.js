@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js";
+import { integrateRide } from "./physics.mjs";
 
 const $ = id => document.getElementById(id);
 const clamp = THREE.MathUtils.clamp;
@@ -77,19 +78,19 @@ function boxGeo(w,h,d) {
 function cube(parent, mat, w,h,d, x=0,y=0,z=0) {
   const mesh = new THREE.Mesh(boxGeo(w,h,d), mat);
   mesh.position.set(x,y,z);
-  parent.add(mesh);
+  if(sceneryClear(parent,x,y,z,w,h,d))parent.add(mesh);
   return mesh;
 }
 function cylinder(parent, mat, radiusTop, radiusBot, height, x,y,z, sides=8) {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop,radiusBot,height,sides),mat);
   m.position.set(x,y,z);
-  parent.add(m);
+  if(sceneryClear(parent,x,y,z,Math.max(radiusTop,radiusBot)*2,height,Math.max(radiusTop,radiusBot)*2))parent.add(m);
   return m;
 }
 function sphere(parent, mat, radius, x,y,z, width=12, height=8) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(radius,width,height),mat);
   m.position.set(x,y,z);
-  parent.add(m);
+  if(sceneryClear(parent,x,y,z,radius*2,radius*2,radius*2))parent.add(m);
   return m;
 }
 function lineTube(parent, pts, radius, mat) {
@@ -187,6 +188,7 @@ function frameGroup(t, side=0) {
   g.position.copy(p);
   g.rotation.y = Math.atan2(-d.x,-d.z);
   if(side)g.translateX(side);
+  g.userData.trackScenery=true;
   scene.add(g);
   return g;
 }
@@ -207,6 +209,37 @@ const chapters=[
   {title:"THE LAST EXIT",subtitle:"DO NOT TRUST THE EXIT SIGNS",sector:"EXIT"}
 ];
 function openArea(t) { return (t>.295&&t<.365)||(t>.535&&t<.648); }
+
+// Check hard scenery against the swept passenger envelope on EVERY part
+// of the track: the circuit passes close to itself in a few places.
+const ridePathSamples=Array.from({length:Math.ceil(trackLength/.65)+1},(_,i)=>{
+  const t=i/Math.ceil(trackLength/.65);
+  return {t,p:at(t)};
+});
+function rideVolumeOverlaps(parent,x,y,z,w,h,d) {
+  const angle=parent.rotation.y, cos=Math.cos(angle),sin=Math.sin(angle);
+  const hx=w/2,hy=h/2,hz=d/2;
+  for(const {p} of ridePathSamples) {
+    const dx=p.x-parent.position.x,dz=p.z-parent.position.z;
+    const lx=cos*dx-sin*dz,lz=sin*dx+cos*dz;
+    const horizontal=Math.hypot(Math.max(0,Math.abs(lx-x)-hx),Math.max(0,Math.abs(lz-z)-hz));
+    if(horizontal>1.9)continue;
+    const ly=p.y-parent.position.y;
+    if(ly+3.2>=y-hy && ly-.55<=y+hy)return true;
+  }
+  return false;
+}
+function sceneryClear(parent,x,y,z,w,h,d) {
+  return !parent.userData.trackScenery || !rideVolumeOverlaps(parent,x,y,z,w,h,d);
+}
+function worldSupportClear(p,t,radius,height) {
+  for(const s of ridePathSamples) {
+    if(Math.abs(s.t-t)<.016)continue;
+    if(Math.hypot(s.p.x-p.x,s.p.z-p.z)<radius+1.85 &&
+       s.p.y+3.2>p.y-height && s.p.y-.55<p.y)return false;
+  }
+  return true;
+}
 
 function buildTrack() {
   const left=[],right=[],center=[];
@@ -238,8 +271,10 @@ function buildTrack() {
     if(i%5===0){
       const footY=openArea(t)?-2:-1.6;
       const supportHeight=Math.max(.1,p.y-footY-.4);
-      const col=cylinder(scene,materials.rustyIron,.115,.17,supportHeight,p.x,p.y-.35-supportHeight/2,p.z,6);
-      if(openArea(t)){cube(scene,materials.stone,1.2,.28,1.2,p.x,footY-.15,p.z);}
+      if(worldSupportClear(p,t,.2,supportHeight)){
+        cylinder(scene,materials.rustyIron,.115,.17,supportHeight,p.x,p.y-.35-supportHeight/2,p.z,6);
+        if(openArea(t))cube(scene,materials.stone,1.2,.28,1.2,p.x,footY-.15,p.z);
+      }
     }
   }
 }
@@ -356,6 +391,7 @@ function buildWorld() {
 }
 function portrait(t, side) {
   const g=frameGroup(t);
+  if(!sceneryClear(g,side*5.76,2.7,0,.8,4.7,3.7))return;
   const x=side*5.76;
   cube(g,materials.woodTrim,.28,4.55,3.4,x,2.7,0);
   const p=new THREE.Mesh(new THREE.PlaneGeometry(3.1,4.2),new THREE.MeshBasicMaterial({map:portraitTexture,side:THREE.DoubleSide}));
@@ -373,6 +409,7 @@ function ghost(t, side, scale=1.2) {
 }
 function coffin(t,side) {
   const g=frameGroup(t);
+  if(!sceneryClear(g,side*4,-.7,0,3,2,4.3))return;
   const x=side*4.0;
   const base=cube(g,materials.wood,2.15,.72,3.4,x,-1.08,0);
   base.rotation.y=range(-.5,.5);
@@ -383,6 +420,7 @@ function coffin(t,side) {
 }
 function sculpture(t,side) {
   const g=frameGroup(t);
+  if(!sceneryClear(g,side*4.2,1.5,0,2.8,6.2,2.9))return;
   const x=side*4.2;
   cube(g,materials.stoneTrim,2.1,.6,2.1,x,-1.39,0);
   cube(g,materials.stone,1.2,3.1,1.2,x,.55,0);
@@ -395,6 +433,7 @@ function sculpture(t,side) {
 }
 function nursery(t,side) {
   const g=frameGroup(t);
+  if(!sceneryClear(g,side*3.6,0,0,3.3,2.7,2.3))return;
   const x=side*3.6;
   cube(g,materials.woodTrim,2.7,.23,1.4,x,-.6,0);
   for(const sx of [-1,1]){
@@ -496,6 +535,7 @@ camera.add(scareFace);
 
 const state={
   progress:0,distance:0,speed:0,time:0,playing:false,paused:false,done:false,
+  forces:{acceleration:0,totalG:1,verticalG:1,lateralG:0,braking:0,traction:0,mode:"drive"},
   soundOn:true,lightsOn:true,scareLevel:"full",scares:0,chapter:-1,
   chapterHold:0,whisperHold:0,scareTime:0,scareDuration:.8,scareFlicker:0,
   viewYaw:0,viewPitch:0,dragging:false,lastInput:0,motionReduced:window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -515,21 +555,14 @@ const whispers=[
   {at:.875,text:"THERE WAS NEVER AN EXIT"}
 ];
 const playedScares=new Set(), playedWhispers=new Set();
-function profileSpeed(t) {
-  let base=7.2;
-  if(t<.085)base=7.2;
-  else if(t<.183)base=4.6;
-  else if(t<.294)base=11.7;
-  else if(t<.37)base=17;
-  else if(t<.5)base=5.0;
-  else if(t<.535)base=13;
-  else if(t<.65)base=24;
-  else if(t<.685)base=12;
-  else if(t<.813)base=4.5;
-  else if(t<.897)base=13;
-  else if(t<.947)base=4.5;
-  else base=7;
-  return clamp(base-tangent(t).y*7,3.6,27);
+// Signed curvature in 1/metre and track grade for the force integrator.
+function sampleTrackForces(t) {
+  const eps=Math.min(.0015,3/trackLength);
+  const a=Math.max(0,t-eps),b=Math.min(1,t+eps);
+  const dir=tangent(t);
+  const derivative=tangent(b).sub(tangent(a)).divideScalar(Math.max(.01,(b-a)*trackLength));
+  const lateral=new THREE.Vector3().crossVectors(dir,UP).normalize();
+  return {grade:dir.y,verticalCurvature:derivative.y,lateralCurvature:derivative.dot(lateral)};
 }
 function formatTime(s) {
   const time=Math.max(0,Math.floor(s));
@@ -639,6 +672,7 @@ function updateHud(){
   $("timeValue").textContent=formatTime(state.time);
   $("progressValue").textContent=String(Math.floor(state.progress*100)).padStart(2,"0")+"%";
   $("progressFill").style.width=(state.progress*100).toFixed(2)+"%";
+  $("gValue").textContent=state.forces.totalG.toFixed(1);
 }
 function finish(){
   if(state.done)return;
@@ -651,6 +685,7 @@ function finish(){
 }
 function reset(){
   state.progress=0;state.distance=0;state.speed=0;state.time=0;
+  state.forces={acceleration:0,totalG:1,verticalG:1,lateralG:0,braking:0,traction:0,mode:"drive"};
   state.done=false;state.paused=false;state.playing=true;state.scares=0;
   state.scareTime=0;state.scareFlicker=0;state.viewYaw=0;state.viewPitch=0;
   state.chapter=-1;state.chapterHold=0;state.whisperHold=0;
@@ -665,7 +700,7 @@ function reset(){
   $("liveIndicator").querySelector("span").textContent="RIDE IN PROGRESS";
   $("pauseButton").classList.remove("is-active");
   $("pauseButton").title="Pause ride (Space)";
-  audio.init();audio.setEnabled(state.soundOn);
+  audio.init();audio.lastDistance=0;audio.setPaused(false);audio.setEnabled(state.soundOn);
   updateHud();
 }
 function toggleLight(){
@@ -686,6 +721,7 @@ function togglePause(){
   $("pauseButton").querySelector("span").textContent=state.paused?"RESUME":"PAUSE";
   $("pauseButton").title=state.paused?"Resume ride (Space)":"Pause ride (Space)";
   $("liveIndicator").querySelector("span").textContent=state.paused?"RIDE PAUSED":"RIDE IN PROGRESS";
+  audio.setPaused(state.paused);
 }
 $("startRide").addEventListener("click",reset);
 $("rideAgain").addEventListener("click",reset);
@@ -775,9 +811,12 @@ function updateProps(now,dt){
     g.mesh.lookAt(tmpV);
   }
   for(const d of doors){
-    const distance=d.t-state.progress;
-    const opening=1-clamp((distance-.005)/.032,0,1);
-    d.pivot.rotation.y=d.side*opening*1.3;
+    const metresAhead=(d.t-state.progress)*trackLength;
+    let opening=0;
+    if(metresAhead<32&&metresAhead>18)opening=1-(metresAhead-18)/14;
+    else if(metresAhead<=18&&metresAhead>=-12)opening=1;
+    else if(metresAhead< -12&&metresAhead> -30)opening=1-(-metresAhead-12)/18;
+    d.pivot.rotation.y=d.side*opening*1.57;
   }
 }
 let lastHud=0,lastTime=performance.now();
@@ -788,10 +827,11 @@ function animate(ms){
   const now=ms/1000;
   if(state.playing&&!state.paused&&!state.done){
     state.time+=dt;
-    const target=profileSpeed(state.progress);
-    state.speed+=((target-state.speed)*Math.min(1,dt*(target>state.speed?1.2:1.8)));
-    state.distance+=state.speed*dt;
-    state.progress=clamp(state.distance/trackLength,0,1);
+    const frame=integrateRide(state,dt,trackLength,sampleTrackForces);
+    state.speed=frame.speed;
+    state.distance=frame.distance;
+    state.progress=frame.progress;
+    state.forces=frame.forces;
     const newChapter=chapterAt(state.progress);
     if(newChapter!==state.chapter){state.chapter=newChapter;showChapter(newChapter);}
     for(let i=0;i<scareBeats.length;i++){
@@ -813,7 +853,7 @@ function animate(ms){
       if(state.whisperHold<=0)$("whisper").classList.remove("visible");
     }
     updateScare(dt);
-    audio.tick(state.speed,state.progress);
+    audio.tick(state.speed,state.distance,state.forces);
     if(state.progress>=1)finish();
   }else if(!state.playing&&!state.done){
     state.progress=0;state.speed=0;
