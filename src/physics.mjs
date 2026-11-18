@@ -18,14 +18,16 @@ function clamp(x, low, high) {
 }
 
 const hardware = [
-  { from: 0, to: 0.119, type: "drive", target: 6.2, maxForce: 2.4 },
-  { from: 0.119, to: 0.335, type: "lift", target: 4.1, maxForce: 5.8 },
-  { from: 0.396, to: 0.456, type: "brake", target: 5.2, maxForce: 5.2 },
-  { from: 0.442, to: 0.585, type: "drive", target: 5.0, maxForce: 2.8 },
-  { from: 0.578, to: 0.693, type: "lift", target: 4.0, maxForce: 7.3 },
-  { from: 0.746, to: 0.817, type: "brake", target: 5.0, maxForce: 4.4 },
-  { from: 0.807, to: 0.982, type: "drive", target: 5.4, maxForce: 2.2 },
-  { from: 0.982, to: 1, type: "drive", target: 3.6, maxForce: 2.2 }
+  // The boarding tyres briskly launch the train before the first powered lift.
+  { from: 0, to: 0.115, type: "drive", target: 10.5, maxForce: 5.0 },
+  { from: 0.115, to: 0.33, type: "lift", target: 11.3, maxForce: 12.5 },
+  // Hard braking happens AFTER the thrill of the drop, not on the crest.
+  { from: 0.416, to: 0.459, type: "brake", target: 8.0, maxForce: 9.3 },
+  { from: 0.448, to: 0.581, type: "drive", target: 9.6, maxForce: 4.5 },
+  { from: 0.579, to: 0.690, type: "lift", target: 11.1, maxForce: 13.8 },
+  { from: 0.774, to: 0.827, type: "brake", target: 9.0, maxForce: 8.8 },
+  { from: 0.812, to: 0.968, type: "drive", target: 10.3, maxForce: 4.5 },
+  { from: 0.968, to: 1, type: "brake", target: 6.0, maxForce: 4.3 }
 ];
 
 export function trackHardware(progress) {
