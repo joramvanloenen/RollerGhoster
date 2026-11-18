@@ -23,8 +23,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Validate gravity, lift, brake and integration physics
-        run: node --test tests/physics.test.mjs
+      - name: Install Three.js for geometry smoke tests
+        run: npm install --no-save --no-package-lock three@0.164.1
+      - name: Validate physics and generated estate geometry
+        run: node --test tests/*.test.mjs
+      - name: Keep test dependencies out of the published site
+        run: rm -rf node_modules
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
