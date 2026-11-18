@@ -1,5 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js";
 import { integrateRide } from "./physics.mjs";
+import { buildEstate } from "./scenery.mjs";
 
 const $ = id => document.getElementById(id);
 const clamp = THREE.MathUtils.clamp;
@@ -22,12 +23,12 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.37;
+renderer.toneMappingExposure = .74;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x06090b);
-scene.fog = new THREE.FogExp2(0x090e11, 0.018);
-scene.add(new THREE.HemisphereLight(0x7b94aa, 0x120c0a, 0.23));
-const moonlight = new THREE.DirectionalLight(0x9dbbdf, 0.43);
+scene.background = new THREE.Color(0x010204);
+scene.fog = new THREE.FogExp2(0x030507, 0.043);
+scene.add(new THREE.HemisphereLight(0x6c8294, 0x080505, 0.045));
+const moonlight = new THREE.DirectionalLight(0x70869f, 0.10);
 moonlight.position.set(-35, 42, -65);
 scene.add(moonlight);
 
@@ -39,7 +40,7 @@ camera.position.set(0, 1.53, 0.63);
 
 const flashlightPair = [];
 function flashlight(x, y, strength, angle) {
-  const light = new THREE.SpotLight(0xffefce, strength, 42, angle, 0.62, 1.45);
+  const light = new THREE.SpotLight(0xffe0ab, strength, 34, angle, 0.79, 1.7);
   light.position.set(x, y, 0.03);
   const target = new THREE.Object3D();
   target.position.set(x * 0.15, -0.5, -22);
@@ -48,8 +49,8 @@ function flashlight(x, y, strength, angle) {
   light.target = target;
   flashlightPair.push({light, strength});
 }
-flashlight(-0.29, -0.13, 90, Math.PI / 7.1);
-flashlight(0.31, -0.15, 72, Math.PI / 7.6);
+flashlight(-0.29, -0.13, 48, Math.PI / 10.0);
+flashlight(0.31, -0.15, 37, Math.PI / 10.8);
 
 const materials = {
   rail: new THREE.MeshStandardMaterial({color: 0x6e777a, metalness: 0.85, roughness: 0.33}),
@@ -170,7 +171,8 @@ const scareTexture = canvasTexture((c,w,h)=>{
 },256,256);
 
 const pathPoints = [
-  [0,3,37], [0,3,23], [0,3,3], [0,3,-24],
+  // First and returning legs use separate corridors, not the same line.
+  [0,3,37], [17,3,27], [26,3,6], [23,3,-21],
   [11,4,-44], [32,6,-57], [55,14,-43], [62,21,-15],
   [52,17,11], [39,5,24], [19,4,37], [-6,4,40],
   [-31,4,31], [-49,9,17], [-57,20,-8], [-45,17,-31],
@@ -208,7 +210,7 @@ const chapters=[
   {title:"THE FAMILY CRYPT",subtitle:"SOMEONE IS WAITING BELOW",sector:"CRYPT"},
   {title:"THE LAST EXIT",subtitle:"DO NOT TRUST THE EXIT SIGNS",sector:"EXIT"}
 ];
-function openArea(t) { return (t>.295&&t<.365)||(t>.535&&t<.648); }
+function openArea(t) { return (t>.272&&t<.421)||(t>.574&&t<.735)||(t>.812&&t<.856); }
 
 // Check hard scenery against the swept passenger envelope on EVERY part
 // of the track: the circuit passes close to itself in a few places.
@@ -296,99 +298,14 @@ const doors=[];
 const ghosts=[];
 const embers=[];
 function buildWorld() {
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(230,230),new THREE.MeshStandardMaterial({color:0x101519,roughness:1}));
-  ground.rotation.x=-Math.PI/2;
-  ground.position.y=-2.17;
-  scene.add(ground);
-  const roofCount=Math.max(1,Math.floor(trackLength/6));
-  for(let i=0;i<roofCount;i++){
-    const t=(i+.5)/roofCount;
-    const root=frameGroup(t);
-    const wood=t<.2||t>.85;
-    const crypt=t>.67&&t<.86;
-    const wall=wood?materials.wood:crypt?materials.stone:materials.brick;
-    const trim=wood?materials.woodTrim:materials.stoneTrim;
-    if(!openArea(t)){
-      cube(root,materials.stone,13.4,.28,6.55,0,-1.83,0);
-      cube(root,wall,.54,8.9,6.6,-6.65,2.55,0);
-      cube(root,wall,.54,8.9,6.6,6.65,2.55,0);
-      cube(root,wall,13.7,.52,6.58,0,7.23,0);
-      if(i%2===0){
-        for(const side of [-1,1]){
-          cube(root,trim,.8,8.7,.9,side*6.25,2.44,-2.82);
-          cube(root,materials.black,1.1,3.7,.22,side*6.21,1.9,0);
-          cube(root,trim,.26,4.2,.26,side*6.04,1.9,-2.35);
-          cube(root,trim,.26,4.2,.26,side*6.04,1.9,2.35);
-        }
-        cube(root,trim,13.55,.65,.78,0,6.6,-2.85);
-        cylinder(root,materials.iron,.09,.09,1.5,0,6.15,-2.85,6);
-      }
-      if(i%8===2){
-        const x=i%16===2?-4.35:4.35;
-        const lamp=makeLamp(root,x,4.95,-.8,lamps.length<11);
-        if(lamp)lamps.push({light:lamp,base:lamp.intensity,phase:range(0,12)});
-      }
-      if(wood&&i%3===0) {
-        for(const side of [-1,1]){
-          cube(root,materials.woodTrim,.1,5.4,3.65,side*6.18,2.15,0);
-          cube(root,materials.wood,.13,4.9,3.25,side*6.10,2.15,0);
-        }
-      }
-      if(crypt&&i%3===1){
-        const side=i%2===0?1:-1;
-        cube(root,materials.black,.24,3.8,2.7,side*6.08,2.0,0);
-        const sigil=new THREE.Mesh(new THREE.PlaneGeometry(2.0,2.0),new THREE.MeshBasicMaterial({map:sigilTexture,transparent:true,opacity:.4,side:THREE.DoubleSide,depthWrite:false}));
-        sigil.position.set(side*5.9,2.4,0);
-        sigil.rotation.y=Math.PI/2;
-        root.add(sigil);
-      }
-    }else{
-      if(i%3===0){
-        for(const side of [-1,1]){
-          const x=side*6.1, y=-.4;
-          cylinder(root,materials.stone,.43,.59,range(4,7),x,y,0,6);
-          if(random()>.35){
-            const cross=cube(root,materials.stoneTrim,.39,2.3,.35,side*8.0,-.55,range(-2,2));
-            cube(root,materials.stoneTrim,1.4,.36,.34,cross.position.x,.04,cross.position.z);
-          }
-        }
-      }
-    }
-  }
-  const moon=sphere(scene,materials.moon,5,-78,52,-100,24,16);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({map:canvasTexture((c,w,h)=>{
-    const g=c.createRadialGradient(128,128,12,128,128,128);
-    g.addColorStop(0,"rgba(160,191,215,.35)");g.addColorStop(1,"rgba(160,191,215,0)");
-    c.fillStyle=g;c.fillRect(0,0,w,h);
-  }),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
-  halo.position.copy(moon.position);halo.scale.set(45,45,1);scene.add(halo);
-  for(let i=0;i<38;i++){
-    const t=(i+.5)/38;
-    if(!openArea(t))continue;
-    const root=frameGroup(t);
-    for(const side of [-1,1]){
-      const x=side*range(10,19), z=range(-5,5);
-      const trunk=cylinder(root,materials.black,.13,.32,range(7,13),x,3,z,6);
-      trunk.rotation.z=range(-.17,.17);
-      for(let b=0;b<3;b++){
-        const branch=cylinder(root,materials.black,.05,.11,range(3,6),x+range(-2,2),6+range(0,5),z+range(-2,2),5);
-        branch.rotation.z=range(-1,1);
-      }
-    }
-  }
-  // Cast shadows as architecture, not as a flat painted backdrop.
-  for(let i=0;i<46;i++){
-    const t=range(.01,.99);
-    const root=frameGroup(t,range(-2.5,2.5));
-    const fog=new THREE.Mesh(new THREE.PlaneGeometry(range(5,11),range(2,5)),materials.fog);
-    fog.rotation.x=-Math.PI/2;fog.position.y=-1.0;root.add(fog);
-  }
-  // Dust visible in the cone of the carriage lamps.
-  const particles=new Float32Array(540*3);
-  for(let i=0;i<540;i++){particles[i*3]=range(-80,80);particles[i*3+1]=range(0,27);particles[i*3+2]=range(-80,65);}
-  const pg=new THREE.BufferGeometry();pg.setAttribute("position",new THREE.BufferAttribute(particles,3));
-  scene.add(new THREE.Points(pg,new THREE.PointsMaterial({color:0xb9a898,size:.08,transparent:true,opacity:.43,depthWrite:false})));
+  // All architecture now joins at shared spline samples. Tree branches,
+  // foundations and roof geometry come from a dedicated world generator.
+  return buildEstate({
+    THREE,scene,materials,at,tangent,trackLength,frameGroup,
+    sceneryClear,lamps,openArea,random,range,canvasTexture,ridePathSamples
+  });
 }
+
 function portrait(t, side) {
   const g=frameGroup(t);
   if(!sceneryClear(g,side*5.76,2.7,0,.8,4.7,3.7))return;
@@ -482,24 +399,22 @@ function setpieces() {
   portrait(.202,1);portrait(.235,-1);portrait(.27,1);
   ghost(.157,1,1.05);ghost(.29,-1,1.3);
   sculpture(.21,-1);sculpture(.264,1);
-  nursery(.392,1);nursery(.435,-1);nursery(.47,1);
-  ghost(.417,-1,1.0);ghost(.486,1,1.45);
-  coffin(.68,1);coffin(.715,-1);coffin(.755,1);coffin(.802,-1);
-  sculpture(.69,-1);sculpture(.795,1);
+  nursery(.46,1);nursery(.492,-1);nursery(.522,1);
+  ghost(.436,-1,1.0);ghost(.512,1,1.45);
+  coffin(.741,1);coffin(.767,-1);coffin(.788,1);coffin(.804,-1);
+  sculpture(.755,-1);sculpture(.799,1);
   ghost(.74,-1,1.45);ghost(.82,1,1.7);
   portrait(.87,-1);portrait(.9,1);
   ghost(.927,-1,1.9);
-  doorsAt(.328);doorsAt(.585);doorsAt(.857);
-  for(let i=0;i<38;i++){
+  doorsAt(.272);doorsAt(.422);doorsAt(.574);doorsAt(.735);doorsAt(.856);
+  for(let i=0;i<20;i++){
     const t=range(0,1);
     const g=frameGroup(t);
     const side=random()<.5?-1:1;
     if(openArea(t)){
       const x=side*range(7.5,12);
-      const grave=cube(g,materials.stoneTrim,range(.6,1.5),range(1,2),.24,x,-.8,range(-3,3));
-      grave.rotation.z=range(-.2,.2);
-    } else if(random()>.5) {
-      cube(g,materials.rustyIron,.07,range(1.5,5),.07,side*5.6,range(3,5),range(-3,3));
+      // Sculpted outdoor graves are generated on the ground in scenery.mjs.
+      // The raised track gets no hovering tombstones.
     }
   }
 }
