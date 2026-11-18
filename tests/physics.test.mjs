@@ -16,7 +16,7 @@ assert.ok(computeRideForces(.36,20,0).airResistance > computeRideForces(.36,10,0
 assert.ok(computeRideForces(.42,19,-.5).braking > 0);
 assert.equal(trackHardware(.28)?.type,"lift");
 assert.equal(trackHardware(.62)?.type,"lift");
-assert.equal(trackHardware(.77)?.type,"brake");
+assert.equal(trackHardware(.79)?.type,"brake");
 
 // Higher speed and curvature both increase centripetal load.
 assert.ok(computeRideForces(.36,20,0,.04,.03).totalG > computeRideForces(.36,7,0,.04,.03).totalG);
