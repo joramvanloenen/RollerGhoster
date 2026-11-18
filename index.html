@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080a0c">
+  <meta name="description" content="RollerGhoster — an atmospheric haunted rollercoaster ride.">
+  <title>RollerGhoster — The Last Ride</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main id="app">
+    <canvas id="scene" aria-label="3D view from a haunted rollercoaster car"></canvas>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+    <div id="scareFlash" class="scare-flash" aria-hidden="true"></div>
+    <div id="blink" class="blink" aria-hidden="true"></div>
+
+    <header id="hudTop" class="hud-top">
+      <div class="brand"><span class="brand-symbol">✝</span><span>ROLLER<span class="brand-ghost">GHOSTER</span></span><small>THE LAST RIDE</small></div>
+      <div class="top-right">
+        <div id="liveIndicator" class="live-indicator"><i></i><span>RIDE STANDBY</span></div>
+        <button id="lampButton" class="icon-button is-active" type="button" title="Toggle flashlights (F)" aria-label="Toggle flashlights" aria-pressed="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 3h6l1 7-1 2v3H9v-3l-1-2zM9 15l-1 6M15 15l1 6M8 21h8M10 7h4"/></svg><span>LIGHTS</span>
+        </button>
+        <button id="soundButton" class="icon-button is-active" type="button" title="Toggle sound (M)" aria-label="Toggle sound" aria-pressed="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 9h4l5-4v14l-5-4H4zM16 9q4 3 0 6M18 6q7 6 0 12"/></svg><span>SOUND</span>
+        </button>
+        <button id="pauseButton" class="icon-button" type="button" title="Pause ride (Space)" aria-label="Pause ride">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 5v14M16 5v14"/></svg><span>PAUSE</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="chapterCard" class="chapter-card" aria-live="polite"><span id="chapterNumber">01 / 06</span><strong id="chapterName">THE BOARDING HOUSE</strong><small id="chapterHint">DO NOT LEAVE THE CAR</small></div>
+    <div id="whisper" class="whisper" aria-live="off"></div>
+    <div id="scareMessage" class="scare-message" aria-hidden="true">IT SEES YOU</div>
+
+    <footer id="hudBottom" class="hud-bottom">
+      <div class="telemetry">
+        <div class="telemetry-block"><small>VELOCITY</small><strong><span id="speedValue">0</span><em>KM/H</em></strong></div>
+        <div class="vertical-rule"></div>
+        <div class="telemetry-block"><small>ELAPSED</small><strong id="timeValue">00:00</strong></div>
+        <div class="vertical-rule"></div>
+        <div class="telemetry-block section-readout"><small>LOCATION</small><strong id="sectorValue">STATION</strong></div>
+      </div>
+      <div class="ride-progress"><div class="progress-meta"><span>TRACK COMPLETION</span><span id="progressValue">00%</span></div><div class="progress-track"><div class="progress-fill" id="progressFill"></div><div class="progress-stops"><i></i><i></i><i></i><i></i><i></i><i></i></div></div><small class="look-hint">DRAG TO LOOK AROUND <span class="desktop-only"> · F LIGHTS · M SOUND · SPACE PAUSE</span></small></div>
+    </footer>
+
+    <section id="welcome" class="overlay" aria-labelledby="welcomeTitle">
+      <div class="landing-grid" aria-hidden="true"></div>
+      <div class="landing-content">
+        <div class="overline"><span class="red-line"></span> BLACKTHORN ESTATE <span class="dash">/</span> CLOSED SINCE 1967</div>
+        <div class="title-wrap"><div class="title-ghost">RG</div><h1 id="welcomeTitle">THE<br><span>LAST</span> RIDE<span class="period">.</span></h1></div>
+        <p class="landing-description">An abandoned attraction. A condemned estate. One last ride through the things they tried to bury.</p>
+        <div class="boarding-row"><span class="ticket-mark">ADMIT <b>ONE</b><small>NO REFUNDS</small></span><div><small>EXPERIENCE</small><b>FIRST-PERSON HORROR COASTER</b></div></div>
+        <div class="launch-row"><button id="startRide" class="start-button" type="button"><span>BOARD THE CAR</span><span class="button-arrow">↗</span></button><button id="scareLevel" class="level-button" type="button" title="Switch scare intensity"><small>SCARE LEVEL</small><b id="levelValue">FULL <span>⌄</span></b></button></div>
+        <p class="disclaimer">HEADPHONES RECOMMENDED <span>·</span> FLASHING LIGHTS &amp; SUDDEN SCARES <span>·</span> SOUND UNLOCKS ON START</p>
+      </div>
+      <div class="side-rail" aria-hidden="true"><span>BLACKTHORN / 1967</span><i></i><span>EST. NO RETURN</span></div>
+    </section>
+
+    <section id="endScreen" class="overlay end-overlay is-hidden" aria-labelledby="endTitle">
+      <div class="end-content">
+        <span class="overline"><span class="red-line"></span> EXIT REPORT / UNCONFIRMED</span>
+        <h2 id="endTitle">YOU MADE<br>IT <span>OUT.</span></h2>
+        <p>There was one more passenger in your car.<br>We don't know where they went.</p>
+        <div class="end-stats"><div><small>RIDE TIME</small><strong id="endTime">--:--</strong></div><div><small>INCIDENTS</small><strong id="endScares">00</strong></div></div>
+        <button id="rideAgain" class="start-button" type="button"><span>RIDE AGAIN</span><span class="button-arrow">↗</span></button>
+      </div>
+    </section>
+    <div id="loading" class="loading"><div class="loading-mark">✝</div><span>PREPARING THE ESTATE</span><i></i></div>
+    <div id="fatalError" class="fatal-error is-hidden" role="alert"></div>
+  </main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
